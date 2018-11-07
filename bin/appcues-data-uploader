@@ -1,0 +1,4 @@
+#!/usr/bin/env -S ruby -Ilib
+require 'appcues_data_uploader'
+AppcuesDataUploader.main(ARGV)
+

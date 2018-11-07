@@ -1,0 +1,4 @@
+user_id,numeric,boolean,string
+123,-.01,true,decks
+ASDF,22,false,omg
+WAT,-2,false,wat
