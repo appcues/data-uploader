@@ -31,7 +31,7 @@ class AppcuesDataUploader
 
       option_parser = OptionParser.new do |opts|
         opts.banner =  <<-EOT
-Usage: #{$0} [options] -a account_id [filename ...]
+Usage: appcues-data-uploader [options] -a account_id [filename ...]
 
 Uploads profile data from one or more CSVs to the Appcues API.
 If no filename or a filename of '-' is given, STDIN is used.
@@ -52,6 +52,8 @@ Will result in two profile updates being sent to the API:
 
     {"account_id": "999", "user_id": "123", "profile_update": {"first_name": "Pete", "has_posse": false, "height_in_inches": 68.5}}
     {"account_id": "999", "user_id": "456", "profile_update": {"first_name": "André", "has_posse": true, "height_in_inches": 88}}
+
+See https://github.com/appcues/data-uploader for more information.
         EOT
 
         opts.separator ""
@@ -87,10 +89,16 @@ Will result in two profile updates being sent to the API:
 
       if !options.account_id
         STDERR.puts "You must specify an account ID with the -a option."
+        STDERR.puts "Run `appcues-data-uploader --help` for more information."
         exit 1
       end
 
-      new(options).perform_uploads()
+      begin
+        new(options).perform_uploads()
+      rescue Exception => e
+        STDERR.puts "#{e.class}: #{e.message}"
+        exit 255
+      end
     end
   end
 
@@ -137,7 +145,7 @@ private
     user_activities = []
 
     CSV.new(input_fh, headers: true).each do |row|
-      row_hash = row.to_h
+      row_hash = row.to_hash
 
       if !user_id_column
         user_id_column = get_user_id_column(row_hash)
@@ -178,7 +186,7 @@ private
     end
 
     if failed_uas.count > 0
-      debug "retrying #{failed_uas.count} requests."
+      debug "Retrying #{failed_uas.count} requests."
       make_activity_requests(failed_uas)
     end
   end
@@ -214,7 +222,7 @@ private
       canonical_key = key.gsub(/[^a-zA-Z]/, '').downcase
       return key if canonical_key == 'userid'
     end
-    raise ArgumentError, "couldn't detect user ID column"
+    raise "Couldn't detect user ID column from CSV input. Ensure that the CSV data starts with headers, and one is named like 'user_id'."
   end
 
   ## Prints a message to STDERR unless we're in quiet mode.

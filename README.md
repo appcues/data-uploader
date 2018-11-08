@@ -42,7 +42,7 @@ appcues-data-uploader --account_id 1337 file.csv
 Or install locally with Git:
 
 ```bash
-git clone https://github.com/appcues/data-uploader appcues-data-uploader
+git clone https://github.com/appcues/data-uploader.git appcues-data-uploader
 
 cd appcues-code-uploader
 bin/appcues-data-uploader --account_id 1337 file.csv
