@@ -2,20 +2,30 @@
 #
 # Appcues Data Uploader
 #
-# Throws CSV-formatted user profile data at the Appcues API.
+# Uploads CSV-formatted user profile data to the Appcues API.
 # Run `appcues-data-uploader -h` for more information.
+#
+# Homepage: https://github.com/appcues/data-uploader
+#
+# Copyright 2018, Appcues, Inc.
+#
+# Released under the MIT License, whose text is available at:
+# https://opensource.org/licenses/MIT
 
 require 'net/http'
 require 'csv'
 require 'json'
 require 'optparse'
+require 'appcues_data_uploader/version'
 
 class AppcuesDataUploader
   UserActivity = Struct.new(:account_id, :user_id, :profile_update, :events)
-  UploadOpts = Struct.new(:account_id, :quiet, :csv_filenames)
+  UploadOpts = Struct.new(:account_id, :csv_filenames, :quiet, :dry_run)
+
   attr_reader :opts
 
   class << self
+    ## Handles command-line invocation.
     def main(argv)
       options = UploadOpts.new
 
@@ -24,23 +34,24 @@ class AppcuesDataUploader
 Usage: #{$0} [options] -a account_id [filename ...]
 
 Uploads profile data from one or more CSVs to the Appcues API.
+If no filename or a filename of '-' is given, STDIN is used.
 
-CSVs should start with a row of header names, including one named something
+Each CSV should start with a row of header names, including one named something
 like "user ID". Other headers will be used verbatim as attribute names.
 
 Attribute values can be boolean ('true' or 'false'), 'null', numeric, or
 string-typed.
 
-For example, the following CSV data:
+For example, giving `appcues-data-uploader -a 999` the following CSV data:
 
     user_id,first_name,has_posse,height_in_inches
-    u123,Pete,false,68.5
-    u456,André,true,88
+    123,Pete,false,68.5
+    456,André,true,88
 
-Will result in two profile updates:
+Will result in two profile updates being sent to the API:
 
-    u123: {"first_name": "Pete", "has_posse": false, "height_in_inches": 68.5}
-    u456: {"first_name": "André", "has_posse": true, "height_in_inches": 88}
+    {"account_id": "999", "user_id": "123", "profile_update": {"first_name": "Pete", "has_posse": false, "height_in_inches": 68.5}}
+    {"account_id": "999", "user_id": "456", "profile_update": {"first_name": "André", "has_posse": true, "height_in_inches": 88}}
         EOT
 
         opts.separator ""
@@ -50,8 +61,18 @@ Will result in two profile updates:
           options.account_id = account_id
         end
 
-        opts.on('-q', '--quiet', 'Do not emit debug output') do
+        opts.on('-d', '--dry-run', 'Write requests to STDOUT instead of sending') do
+          options.dry_run = true
+        end
+
+        opts.on('-q', '--quiet', "Don't write debugging info to STDERR") do
           options.quiet = true
+        end
+
+        opts.on('-v', '--version', "Print version information and exit") do
+          puts "appcues-data-uploader version #{VERSION} (#{VERSION_DATE})"
+          puts "See https://github.com/appcues/data-uploader for more information."
+          exit
         end
 
         opts.on('-h', '--help', 'Print this message and exit') do
@@ -76,8 +97,9 @@ Will result in two profile updates:
   def initialize(init_opts)
     @opts = init_opts.is_a?(UploadOpts) ? init_opts : UploadOpts.new(
       init_opts[:account_id] || init_opts["account_id"],
+      init_opts[:csv_filenames] || init_opts["csv_filenames"],
       init_opts[:quiet] || init_opts["quiet"],
-      init_opts[:csv_filenames] || init_opts["csv_filenames"]
+      init_opts[:dry_run] || init_opts["dry_run"],
     )
 
     if !opts.account_id
@@ -107,16 +129,14 @@ private
   ## appropriate data type.
   def upload_profile_csv(csv_filename)
     display_filename = csv_filename == '-' ? "STDIN" : "'#{csv_filename}'"
+    input_fh = csv_filename == '-' ? STDIN : File.open(csv_filename, 'r')
 
     debug "Uploading profiles from #{display_filename} for account #{opts.account_id}..."
 
     user_id_column = nil
     user_activities = []
 
-    fh = STDIN
-    fh = File.open(csv_filename, 'r') if csv_filename != '-'
-
-    CSV.new(fh, headers: true).each do |row|
+    CSV.new(input_fh, headers: true).each do |row|
       row_hash = row.to_h
 
       if !user_id_column
@@ -129,9 +149,15 @@ private
       user_activities << UserActivity.new(opts.account_id, user_id, profile_update, [])
     end
 
-    fh.close
+    input_fh.close
 
-    make_activity_requests(user_activities)
+    if opts.dry_run
+      user_activities.each do |ua|
+        puts JSON.dump(ua.to_h)
+      end
+    else
+      make_activity_requests(user_activities)
+    end
 
     debug "Done processing #{display_filename}."
   end
@@ -144,9 +170,9 @@ private
     user_activities.each do |ua|
       resp = make_activity_request(ua)
       if resp.code.to_i / 100 == 2
-        debug "request for user_id #{ua.user_id} was successful"
+        debug "Request for user_id #{ua.user_id} was successful"
       else
-        debug "request for user_id #{ua.user_id} failed with code #{resp.code} -- retrying later"
+        debug "Request for user_id #{ua.user_id} failed with code #{resp.code} -- retrying later"
         failed_uas << ua
       end
     end
@@ -191,9 +217,9 @@ private
     raise ArgumentError, "couldn't detect user ID column"
   end
 
-  ## Prints a message to STDERR unless we're running in quiet mode.
+  ## Prints a message to STDERR unless we're in quiet mode.
   def debug(msg)
-    STDERR.puts(msg) if !self.opts.quiet
+    STDERR.puts(msg) unless self.opts.quiet
   end
 
   ## Returns the base URL for the Appcues API.
