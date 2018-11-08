@@ -3,7 +3,13 @@
 A command-line tool for uploading CSVs of user profile data to the
 Appcues API (https://api.appcues.com/).
 
-Written in Ruby, with zero dependencies.
+## Requirements
+
+Appcues Data Uploader is written in Ruby, with zero dependencies.
+Requires Ruby 2.0 or above (standard on OS X and most Unix).
+
+This software is designed for use at the command line, i.e.,
+from Terminal.app (OS X), Gnome-terminal or Xterm (Unix), or similar.
 
 ## How It Works
 
@@ -28,20 +34,33 @@ strings.
 Install with RubyGems:
 
 ```bash
-gem install appcues_data_uploader`
+sudo gem install appcues_data_uploader`
+
 appcues-data-uploader --account_id 1337 file.csv
 ```
 
-Or use it without installing system-wide:
+Or install locally with Git:
+
+```bash
+git clone https://github.com/appcues/data-uploader appcues-data-uploader
+
+cd appcues-code-uploader
+bin/appcues-data-uploader --account_id 1337 file.csv
+```
+
+Or download it manually, if Git is not available:
 
 ```bash
 curl https://codeload.github.com/appcues/data-uploader/zip/master > appcues-code-uploader.zip
 unzip appcues-code-uploader.zip
-cd appcues-code-uploader-master
+rm appcues-code-uploader.zip
+mv appcues-code-uploader-master appcues-code-uploader
+
+cd appcues-code-uploader
 bin/appcues-data-uploader --account_id 1337 file.csv
 ```
 
-Run `appcues-data-uploader -h` to see all options.
+Run `appcues-data-uploader -h` to see all usage options.
 
 ## Testing
 
