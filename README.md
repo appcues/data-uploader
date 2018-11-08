@@ -1,4 +1,4 @@
-# Appcues Data Uploader
+# Appcues Data Uploader <img src="https://travis-ci.com/appcues/data-uploader.svg?branch=master" alt="Build status">
 
 A command-line tool for uploading CSVs of user profile data to the
 Appcues API (https://api.appcues.com/).
