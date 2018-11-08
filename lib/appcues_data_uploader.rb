@@ -1,15 +1,19 @@
 #!/usr/bin/env ruby
+#
+# Appcues Data Uploader
+#
+# Throws CSV-formatted user profile data at the Appcues API.
+# Run `appcues-data-uploader -h` for more information.
 
 require 'net/http'
 require 'csv'
 require 'json'
 require 'optparse'
-require 'pp'
 
 class AppcuesDataUploader
   UserActivity = Struct.new(:account_id, :user_id, :profile_update, :events)
   UploadOpts = Struct.new(:account_id, :quiet, :csv_filenames)
-  attr_accessor :opts
+  attr_reader :opts
 
   class << self
     def main(argv)
@@ -17,15 +21,15 @@ class AppcuesDataUploader
 
       option_parser = OptionParser.new do |opts|
         opts.banner =  <<-EOT
-Usage: #{$0} -a account_id csvfile1 [csvfile2 ...]
+Usage: #{$0} [options] -a account_id [filename ...]
 
 Uploads profile data from one or more CSVs to the Appcues API.
 
-CSVs should start with a row of header names, including one named
-'user_id' or 'userId'. Other headers will be used as attribute names.
+CSVs should start with a row of header names, including one named something
+like "user ID". Other headers will be used verbatim as attribute names.
 
-Attribute values can be boolean ('true' or 'false'), numeric, or string-
-typed.
+Attribute values can be boolean ('true' or 'false'), 'null', numeric, or
+string-typed.
 
 For example, the following CSV data:
 
@@ -69,8 +73,13 @@ Will result in two profile updates:
     end
   end
 
-  def initialize(upload_opts)
-    self.opts = upload_opts
+  def initialize(init_opts)
+    @opts = init_opts.is_a?(UploadOpts) ? init_opts : UploadOpts.new(
+      init_opts[:account_id] || init_opts["account_id"],
+      init_opts[:quiet] || init_opts["quiet"],
+      init_opts[:csv_filenames] || init_opts["csv_filenames"]
+    )
+
     if !opts.account_id
       raise ArgumentError, "account_id is required but missing"
     end
@@ -81,8 +90,8 @@ Will result in two profile updates:
   end
 
   def perform_uploads
-    self.opts.csv_filenames.each do |filename|
-      upload_profile_csv(self.opts.account_id, filename)
+    opts.csv_filenames.each do |filename|
+      upload_profile_csv(filename)
     end
   end
 
@@ -94,10 +103,12 @@ private
   ## must be named something like `user_id` or `userId`.
   ## Other header names are treated as attribute names.
   ##
-  ## Numeric and boolean values in this CSV will be converted to their appropriate
-  ## data type.
-  def upload_profile_csv(account_id, csv_filename)
-    debug "Uploading profiles from CSV '#{csv_filename}' for account #{account_id}..."
+  ## Numeric, boolean, and null values in this CSV will be converted to their
+  ## appropriate data type.
+  def upload_profile_csv(csv_filename)
+    display_filename = csv_filename == '-' ? "STDIN" : "'#{csv_filename}'"
+
+    debug "Uploading profiles from #{display_filename} for account #{opts.account_id}..."
 
     user_id_column = nil
     user_activities = []
@@ -105,8 +116,8 @@ private
     fh = STDIN
     fh = File.open(csv_filename, 'r') if csv_filename != '-'
 
-    CSV.new(fh, headers: true) do |row|
-      pp row_hash = row.to_h
+    CSV.new(fh, headers: true).each do |row|
+      row_hash = row.to_h
 
       if !user_id_column
         user_id_column = get_user_id_column(row_hash)
@@ -115,14 +126,14 @@ private
       user_id = row_hash.delete(user_id_column)
       profile_update = cast_data_types(row_hash)
 
-      user_activities << UserActivity.new(account_id, user_id, profile_update, [])
+      user_activities << UserActivity.new(opts.account_id, user_id, profile_update, [])
     end
 
     fh.close
 
     make_activity_requests(user_activities)
 
-    debug "Done processing CSV '#{csv_filename}'."
+    debug "Done processing #{display_filename}."
   end
 
   ## Applies the given UserActivity updates to the Appcues API.
@@ -153,11 +164,13 @@ private
     profile_update.each do |key, value|
       output[key] =
         case value
+        when 'null'
+          nil
         when 'true'
           true
         when 'false'
           false
-        when /^ -? \d* \. \d+ $/x  # float
+        when /^ -? \d* \. \d+ (?: [eE] [+-]? \d+)? $/x  # float
           value.to_f
         when /^ -? \d+ $/x  # integer
           value.to_i
@@ -171,8 +184,9 @@ private
   ## Detects and returns the name used in the CSV header to identify user ID.
   ## Raises an exception if we can't find it.
   def get_user_id_column(row_hash)
-    ["id", "ID", "userId", "user_id", "User ID", "user ID"].each do |name|
-      return name if row_hash.has_key?(name)
+    row_hash.keys.each do |key|
+      canonical_key = key.gsub(/[^a-zA-Z]/, '').downcase
+      return key if canonical_key == 'userid'
     end
     raise ArgumentError, "couldn't detect user ID column"
   end
@@ -196,8 +210,10 @@ private
   ## returning the Net::HTTPResponse object.
   def make_activity_request(user_activity)
     url = activity_url(user_activity.account_id, user_activity.user_id)
-    data = {"profile_update" => user_activity.profile_update, "events" => user_activity.events}
-    post_request(url, data)
+    post_request(url, {
+      "profile_update" => user_activity.profile_update,
+      "events" => user_activity.events
+    })
   end
 
   ## Makes a POST request to the given URL,
