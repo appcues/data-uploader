@@ -35,8 +35,7 @@ appcues-data-uploader --account_id 1337 file.csv
 Or use it without installing system-wide:
 
 ```bash
-curl https://codeload.github.com/appcues/data-uploader/zip/master >
-appcues-code-uploader.zip
+curl https://codeload.github.com/appcues/data-uploader/zip/master > appcues-code-uploader.zip
 unzip appcues-code-uploader.zip
 cd appcues-code-uploader-master
 bin/appcues-data-uploader --account_id 1337 file.csv
