@@ -34,7 +34,7 @@ strings.
 Install with RubyGems:
 
 ```bash
-sudo gem install appcues_data_uploader`
+sudo gem install appcues_data_uploader
 
 appcues-data-uploader --account_id 1337 file.csv
 ```
